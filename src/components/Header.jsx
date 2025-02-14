@@ -8,7 +8,7 @@ const Header = () => {
     <header className="bg-indigo-600 text-white p-4 flex justify-between items-center">
       <div>
         <Link to="/" className="text-3xl font-bold">
-          Admin Dashboard
+          Jai Hanuman Furniture
         </Link>
       </div>
       <div>

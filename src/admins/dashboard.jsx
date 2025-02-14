@@ -16,7 +16,7 @@ const AdminDashboard = () => {
     <div className="flex min-h-screen bg-gray-100">
       {/* Sidebar */}
       <div className="w-64 bg-indigo-600 text-white p-6">
-        <h2 className="text-3xl font-bold text-center mb-8">Admin Dashboard</h2>
+        
         <ul>
           {tabs.map((tab) => (
             <li key={tab.value} className="mb-4">
