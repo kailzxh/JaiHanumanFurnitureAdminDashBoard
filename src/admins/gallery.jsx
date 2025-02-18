@@ -7,14 +7,15 @@ import 'react-toastify/dist/ReactToastify.css';
 function AdminGallery() {
   const [gallery, setGallery] = useState([]);
   const [newProject, setNewProject] = useState({
-    type: 'image', // image, video, delivery
+    type: 'image',
     title: '',
     description: '',
-    size: 'medium', // ✅ Keeping size instead of category
+    size: 'medium', 
     media: [],
   });
   const [imageFiles, setImageFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
 
   useEffect(() => {
     fetchGallery();
@@ -23,52 +24,57 @@ function AdminGallery() {
   const fetchGallery = async () => {
     console.log('Fetching gallery...');
     const { data, error } = await supabase.from('gallery').select('*');
-  
+
     if (error) {
       console.error('Error fetching gallery:', error);
       toast.error('Error fetching gallery.');
       return;
     }
-  
+
     console.log('Fetched raw data:', data);
-  
+
     const updatedItems = await Promise.all(
       data.map(async (item) => {
         let mediaData = item.media;
-  
+
         if (!mediaData) {
           mediaData = [];
         } else if (typeof mediaData === 'string') {
-          if (mediaData.startsWith('http') || mediaData.endsWith('.jpg') || mediaData.endsWith('.png') || mediaData.endsWith('.mp4')) {
-            mediaData = [mediaData]; // Convert single URL string to array
+          if (
+            mediaData.startsWith('http') ||
+            mediaData.endsWith('.jpg') ||
+            mediaData.endsWith('.png') ||
+            mediaData.endsWith('.mp4')
+          ) {
+            mediaData = [mediaData]; 
           } else {
             try {
-              mediaData = JSON.parse(mediaData); // Parse JSON array if applicable
+              mediaData = JSON.parse(mediaData); 
             } catch (e) {
               console.error('Media parsing error:', e);
               mediaData = [];
             }
           }
         }
-  
-        // ✅ Convert Supabase storage paths to public URLs
+
+        
         const mediaURLs = await Promise.all(
           mediaData.map(async (mediaFile) => {
             if (mediaFile.startsWith('http')) return mediaFile; // Already a URL
-  
+
             const { data: publicURL } = supabase.storage.from('product-images').getPublicUrl(mediaFile);
             return publicURL.publicUrl; // Get public URL from Supabase
           })
         );
-  
+
         return { ...item, media: mediaURLs };
       })
     );
-  
+
     console.log('Processed gallery items:', updatedItems);
     setGallery(updatedItems);
   };
-  
+
   // Upload multiple files to Supabase Storage
   const uploadImages = async () => {
     if (imageFiles.length === 0) {
@@ -121,6 +127,37 @@ function AdminGallery() {
     }
   };
 
+  // Update existing project
+  const updateProject = async () => {
+    if (!newProject.title || !newProject.description) {
+      toast.warning('Title and Description are required.');
+      return;
+    }
+
+    let mediaPaths = [];
+    if (imageFiles.length > 0) {
+      mediaPaths = await uploadImages();
+      if (mediaPaths.length === 0) return;
+    } else {
+      // Use existing media if no new files are selected
+      mediaPaths = editingProject.media;
+    }
+
+    const updatedProject = { ...newProject, media: JSON.stringify(mediaPaths) };
+
+    const { error } = await supabase.from('gallery').update(updatedProject).match({ id: editingProject.id });
+    if (error) {
+      console.error('Error updating project:', error);
+      toast.error('Error updating project.');
+    } else {
+      toast.success('Project updated successfully!');
+      fetchGallery();
+      setNewProject({ type: 'image', title: '', description: '', size: 'medium', media: [] });
+      setImageFiles([]);
+      setEditingProject(null);
+    }
+  };
+
   // Delete project & its media
   const deleteProject = async (id, mediaPaths) => {
     if (!id) return;
@@ -150,10 +187,12 @@ function AdminGallery() {
       <div className="max-w-5xl mx-auto bg-white p-6 shadow-lg rounded-lg">
         <h2 className="text-3xl font-bold text-center mb-6">Admin - Manage Gallery</h2>
 
-        {/* Upload New Project */}
+        {/* Upload / Edit Project */}
         <div className="border p-4 rounded-lg">
-          <h3 className="text-lg font-semibold mb-3">Add New Project</h3>
-          
+          <h3 className="text-lg font-semibold mb-3">
+            {editingProject ? 'Edit Project' : 'Add New Project'}
+          </h3>
+
           <input
             type="text"
             placeholder="Project Title"
@@ -184,8 +223,11 @@ function AdminGallery() {
           <input type="file" multiple onChange={(e) => setImageFiles([...e.target.files])} className="w-full mb-3" />
           {imageFiles.length > 0 && <p className="text-gray-700">{imageFiles.length} files selected</p>}
 
-          <button onClick={addProject} className="w-full mt-4 bg-indigo-600 text-white py-2 rounded-lg font-semibold">
-            {loading ? 'Uploading...' : 'Add Project'}
+          <button
+            onClick={editingProject ? updateProject : addProject}
+            className="w-full mt-4 bg-indigo-600 text-white py-2 rounded-lg font-semibold"
+          >
+            {loading ? 'Uploading...' : editingProject ? 'Update Project' : 'Add Project'}
           </button>
         </div>
 
@@ -219,12 +261,29 @@ function AdminGallery() {
                   )}
                 </div>
 
-                <button
-                  onClick={() => deleteProject(project.id, project.media)}
-                  className="bg-red-500 text-white py-1 px-3 rounded-lg mt-3 flex items-center gap-1"
-                >
-                  <Trash className="w-5 h-5" /> Delete
-                </button>
+                <div className="flex space-x-2 mt-3">
+                  <button
+                    onClick={() => {
+                      setEditingProject(project);
+                      setNewProject({
+                        type: project.type,
+                        title: project.title,
+                        description: project.description,
+                        size: project.size,
+                        media: project.media,
+                      });
+                    }}
+                    className="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => deleteProject(project.id, project.media)}
+                    className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-700 flex items-center gap-1"
+                  >
+                    <Trash className="w-5 h-5" /> Delete
+                  </button>
+                </div>
               </div>
             ))}
           </div>
